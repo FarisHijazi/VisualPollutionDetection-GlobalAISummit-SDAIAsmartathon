@@ -1,12 +1,16 @@
 """
 convert yolo format to smartathon stupid format
 read coco dir txt files and pandas dataframe and puts them in a csv file ready to submit
+
+repositories/yolov5/runs/detect/exp12/labels
 """
+import argparse
 import glob
 import os
+
 import pandas as pd
-import tqdm
-import argparse
+from tqdm import tqdm
+
 import bbox
 
 
@@ -54,15 +58,15 @@ def cocodir2df(globstr='train/labels/*.txt'):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument(
-        'txts_globstr', default='../repositories/yolov5/runs/detect/exp12/labels', help='glob string for txt files'
+        'txts_globstr', default='repositories/yolov5/runs/detect/exp12/labels', help='glob string for txt files'
     )
-    parser.add_argument('-t', '--traincsv', default='train.csv', help='train csv file')
+    parser.add_argument('-d', '--data', default='data/Challenge1/', help='data dir')
     args = parser.parse_args()
 
-    df = pd.read_csv('train.csv')
+    df = pd.read_csv(args.data + '/train.csv')
     id2name = dict(list(zip(df['class'], df['name'])))
 
-    df_test = pd.read_csv('test.csv')
+    df_test = pd.read_csv(args.data + '/test.csv')
     df_test['class'] = 3
     df_test['name'] = 'GARBAGE'
     df_test['xmin'] = 5

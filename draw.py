@@ -1,12 +1,13 @@
 """
 Draws bounding boxes on images and saves them to drawn/ folder.
 """
-import os
-import cv2
-from tqdm import tqdm
-import pandas as pd
 import argparse
+import os
 from multiprocessing.pool import ThreadPool
+
+import cv2
+import pandas as pd
+from tqdm import tqdm
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
