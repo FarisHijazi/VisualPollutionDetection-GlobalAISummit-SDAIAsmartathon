@@ -32,19 +32,29 @@ def cocodir2df_helper(label_path):
     lines = [line.strip().split(' ') for line in lines]
     df_temp = pd.DataFrame(columns=['class', 'image_path', 'x', 'y', 'w', 'h'])
     for line in lines:
-        cls, x, y, w, h, conf = line
-        df_temp = df_temp.append(
-            {
-                'class': float(cls),
-                'image_path': os.path.basename(label_path).replace('.txt', '.jpg'),
-                'x': float(x),
-                'y': float(y),
-                'w': float(w),
-                'h': float(h),
-                'conf': conf,
-            },
-            ignore_index=True,
-        )
+        try:
+            if len(line) == 6:
+                cls, x, y, w, h, conf = line
+            elif len(line) == 5:
+                cls, x, y, w, h = line
+                conf = 0
+
+            df_temp = df_temp.append(
+                {
+                    'class': float(cls),
+                    'image_path': os.path.basename(label_path).replace('.txt', '.jpg'),
+                    'x': float(x),
+                    'y': float(y),
+                    'w': float(w),
+                    'h': float(h),
+                    'conf': conf,
+                },
+                ignore_index=True,
+            )
+        except Exception as e:
+            print(e)
+            print('error in ', label_path)
+            print('line: ', line)
 
     if not lines:
         # dummy value so that submission is accepted
@@ -57,7 +67,7 @@ def cocodir2df_helper(label_path):
                 'y': 0,
                 'w': 0,
                 'h': 0,
-                'conf': conf,
+                'conf': 0,
             },
             ignore_index=True,
         )
