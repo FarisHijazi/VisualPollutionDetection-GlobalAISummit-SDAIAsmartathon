@@ -80,9 +80,12 @@ if __name__ == '__main__':
         'labelsdir', default='repositories/yolov5/runs/detect/exp12/labels', help='glob string for txt files'
     )
     parser.add_argument('-d', '--data', default='data/Challenge1/', help='data dir')
+    parser.add_argument('--topk', type=int, default=0, help='topk')
+    parser.add_argument('--assert_valid', action='store_true', help='assert valid, will fail and exit if not valid')
+    parser.add_argument('--conf_thresh', type=float, default=None, help='confidence threshold')
     overrides = parser.add_argument_group('overrides')
     overrides.add_argument('--setclass', type=int, default=None, help='set all classes to this value')
-    overrides.add_argument('--oversized', action='store_true', help='set all classes to this value')
+    overrides.add_argument('--oversized', action='store_true', help='make all image boxes huge')
     args = parser.parse_args()
 
     df = pd.read_csv(args.data + '/train.csv')
@@ -91,10 +94,10 @@ if __name__ == '__main__':
     df_test = pd.read_csv(args.data + '/test.csv')
     df_test['class'] = 3
     df_test['name'] = 'GARBAGE'
-    df_test['xmin'] = -10000
-    df_test['ymin'] = -10000
-    df_test['xmax'] = 10000
-    df_test['ymax'] = 10000
+    df_test['xmin'] = 1
+    df_test['ymin'] = 1
+    df_test['xmax'] = 50
+    df_test['ymax'] = 50
     df_test = df_test[['class', 'image_path', 'name', 'xmax', 'xmin', 'ymax', 'ymin']]
 
     df_output = cocodir2df(args.labelsdir + '/*.txt')
@@ -104,6 +107,10 @@ if __name__ == '__main__':
     df_output[['xmin', 'ymin', 'xmax', 'ymax']] = (
         df_output[['x', 'y', 'w', 'h']].astype(float).apply(bbox.coco2smartathon, axis=1, result_type='expand')
     )
+
+    # remove items bellow threshold
+    if args.conf_thresh:
+        df_output = df_output[df_output['conf'] > args.conf_thresh]
 
     # filling any empty values from the df_test with dummy values (so that submission doesn't complain)
     # using the df_test
@@ -123,25 +130,37 @@ if __name__ == '__main__':
         df_output['name'] = id2name[args.setclass]
 
     if args.oversized:
-        df_output['xmax'] = -100000
-        df_output['ymax'] = -100000
-        df_output['xmin'] = 100000
-        df_output['ymin'] = 100000
-    else:
-        assert all(df_output['xmin'] >= 0), df_output['xmin']
-        assert all(df_output['ymin'] >= 0), df_output['ymin']
-        assert all(df_output['xmax'] <= 1920), df_output['xmax']
-        assert all(df_output['ymax'] <= 1080), df_output['ymax']
+        df_output['xmax'] = -10000
+        df_output['ymax'] = -10000
+        df_output['xmin'] = 10000
+        df_output['ymin'] = 10000
+    elif args.assert_valid:
+        assert all(df_output['xmin'] >= 0), df_output['xmin'][df_output['xmin'] < 0]
+        assert all(df_output['ymin'] >= 0), df_output['ymin'][df_output['ymin'] < 0]
+        assert all(df_output['xmax'] <= 1920), df_output['xmax'][df_output['xmax'] > 1920]
+        assert all(df_output['ymax'] <= 1080), df_output['ymax'][df_output['ymax'] > 1080]
         assert all(df_output['xmax'] > df_output['xmin'])
         assert all(df_output['ymax'] > df_output['ymin'])
         assert len(df_output) == len(df_test), f'{len(df_output)} == {len(df_test)}'
 
     # groupby image_path and sort by "conf" and choose best confidence row
-    df_output = df_output.sort_values(by=['image_path', 'conf'], ascending=False).groupby('image_path').head(1)
-    # outpath = os.path.join(args.labelsdir, 'submission.smartathon.csv')
-    outpath = os.path.join(
-        args.labelsdir, 'submission.smartathon_cls={setclass}_oversized={oversized}.csv'.format(**vars(args))
-    )
+    df_output = df_output.sort_values(by=['image_path', 'conf'], ascending=False).groupby('image_path')
+    if args.topk > 0:
+        df_output = df_output.head(args.topk)
+    else:
+        df_output = df_output.head(len(df_output))  # choose all
+
+    outname = 'submission.smartathon'
+    if args.setclass:
+        outname += f'_allclasses={args.setclass}'
+    if args.conf_thresh:
+        outname += f'_conf={args.conf_thresh}'
+    if args.topk:
+        outname += f'_top{args.topk}'
+    if args.oversized:
+        outname += f'_oversized'
+    outname += '.csv'
+    outpath = os.path.join(args.labelsdir, outname)
 
     df_output[['class', 'image_path', 'name', 'xmax', 'xmin', 'ymax', 'ymin']].to_csv(outpath, index=False)
     print('saved to', outpath)
