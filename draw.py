@@ -13,13 +13,14 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-d', '--data', default='data/Challenge1/', help='glob string for txt files')
     parser.add_argument('-t', '--traincsv', default='train.csv', help='train csv file')
-
+    parser.add_argument('-o', '--output', default='{data}/drawn', help='output dir')
     args = parser.parse_args()
+
+    args.output = args.output.format(data=args.data)
 
     os.chdir(args.data)
 
-    # shutil.rmtree("drawn/", ignore_errors=True)
-    os.makedirs('/drawn/', exist_ok=True)
+    os.makedirs(args.output, exist_ok=True)
     df = pd.read_csv(args.traincsv)
 
     id2name = dict(list(zip(df['class'], df['name'])))
@@ -71,7 +72,7 @@ if __name__ == '__main__':
                     cv2.LINE_AA,
                 )
 
-        cv2.imwrite('drawn/' + os.path.split(impath)[-1], im)
+        cv2.imwrite(args.output + '/' + os.path.split(impath)[-1], im)
 
     groups = df.groupby('image_path')
     # for impath, subdf in tqdm(groups):
