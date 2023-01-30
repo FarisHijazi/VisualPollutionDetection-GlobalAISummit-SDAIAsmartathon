@@ -6,6 +6,7 @@ repositories/yolov5/runs/detect/exp12/labels
 """
 import argparse
 import glob
+import itertools
 import multiprocessing as mp
 import os
 
@@ -15,8 +16,8 @@ from tqdm import tqdm
 import bbox
 
 
-def cocodir2df(globstr='train/labels/*.txt'):
-    label_paths = glob.glob(globstr)
+def cocodir2df(label_paths: list):
+    # label_paths: list of paths to coco .txt files
     df_output = pd.DataFrame(columns=['class', 'image_path', 'x', 'y', 'w', 'h'])
 
     with mp.Pool(processes=mp.cpu_count()) as pool:
@@ -37,7 +38,7 @@ def cocodir2df_helper(label_path):
                 cls, x, y, w, h, conf = line
             elif len(line) == 5:
                 cls, x, y, w, h = line
-                conf = 0
+                conf = 1
 
             df_temp = df_temp.append(
                 {
@@ -76,17 +77,22 @@ def cocodir2df_helper(label_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(__doc__, formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument(
-        'labelsdir', default='repositories/yolov5/runs/detect/exp12/labels', help='glob string for txt files'
-    )
+    parser.add_argument('labelsdir', nargs='+', help='labels directory containing txt files')
     parser.add_argument('-d', '--data', default='data/Challenge1/', help='data dir')
-    parser.add_argument('--topk', type=int, default=0, help='topk')
+    parser.add_argument('--conf_thresh', type=float, default=None, help='confidence threshold (before topk)')
+    topk = parser.add_mutually_exclusive_group()
+    topk.add_argument('--topk', type=int, default=0, help='topk (exact), 0 for all')
+    # another type of topk is where we take "at least" topk,
+    topk.add_argument('--topk_atleast', type=int, default=0, help='chooses "at least" topk, 0 for all')
     parser.add_argument('--assert_valid', action='store_true', help='assert valid, will fail and exit if not valid')
-    parser.add_argument('--conf_thresh', type=float, default=None, help='confidence threshold')
     overrides = parser.add_argument_group('overrides')
     overrides.add_argument('--setclass', type=int, default=None, help='set all classes to this value')
     overrides.add_argument('--oversized', action='store_true', help='make all image boxes huge')
     args = parser.parse_args()
+
+    assert args.topk == 0 or args.topk_atleast == 0, 'cannot use both topk and topk_atleast'
+    if args.topk_atleast > 0:
+        assert args.conf_thresh is not None, 'must specify conf_thresh with topk_atleast'
 
     df = pd.read_csv(args.data + '/train.csv')
     id2name = dict(list(zip(df['class'], df['name'])))
@@ -100,8 +106,25 @@ if __name__ == '__main__':
     df_test['ymax'] = 50
     df_test = df_test[['class', 'image_path', 'name', 'xmax', 'xmin', 'ymax', 'ymin']]
 
-    df_output = cocodir2df(args.labelsdir + '/*.txt')
+    args.labelsdir = list(itertools.chain.from_iterable(glob.glob(f) for f in args.labelsdir))
+    print('reading from', len(args.labelsdir), 'labelsdir(s)')
+
+    label_paths = list(
+        itertools.chain.from_iterable(glob.glob(os.path.join(labelsdir, '*.txt')) for labelsdir in args.labelsdir)
+    )
+    df_output = cocodir2df(label_paths).astype(
+        {
+            'class': int,
+            'image_path': str,
+            'x': float,
+            'y': float,
+            'w': float,
+            'h': float,
+            'conf': float,
+        }
+    )
     df_output['name'] = df_output['class'].apply(lambda x: id2name[int(x)])
+    print('total bboxes read:', df_output.shape[0])
 
     ## convert coco format to smartathon format
     df_output[['xmin', 'ymin', 'xmax', 'ymax']] = (
@@ -109,8 +132,27 @@ if __name__ == '__main__':
     )
 
     # remove items bellow threshold
-    if args.conf_thresh:
+    if args.conf_thresh and not args.topk_atleast:
         df_output = df_output[df_output['conf'] > args.conf_thresh]
+        print('total bboxes after conf_thresh:', df_output.shape[0])
+
+    # groupby image_path and sort by "conf" and choose best confidence row
+    df_output = df_output.sort_values(by=['image_path', 'conf'], ascending=False).groupby('image_path')
+    if args.topk > 0:
+        df_output = df_output.head(args.topk)
+        print(f'total bboxes after topk:{args.topk}', df_output.shape[0])
+    elif args.topk_atleast > 0:
+        # chooses "at least" args.topk_atleast from each image that crosses the threshold
+        # this is useful when we want to choose at least 1 item from each image
+        df_output = pd.concat(
+            [
+                df_output.head(args.topk_atleast) if df_output['conf'].max() > args.conf_thresh else df_output.head(0)
+                for _, df_output in df_output
+            ]
+        )
+        print(f'total bboxes after topk_atleast:{args.topk_atleast}', df_output.shape[0])
+    else:
+        df_output = df_output.head(len(df_output))  # choose all
 
     # filling any empty values from the df_test with dummy values (so that submission doesn't complain)
     # using the df_test
@@ -143,13 +185,6 @@ if __name__ == '__main__':
         assert all(df_output['ymax'] > df_output['ymin'])
         assert len(df_output) == len(df_test), f'{len(df_output)} == {len(df_test)}'
 
-    # groupby image_path and sort by "conf" and choose best confidence row
-    df_output = df_output.sort_values(by=['image_path', 'conf'], ascending=False).groupby('image_path')
-    if args.topk > 0:
-        df_output = df_output.head(args.topk)
-    else:
-        df_output = df_output.head(len(df_output))  # choose all
-
     outname = 'submission.smartathon'
     if args.setclass:
         outname += f'_allclasses={args.setclass}'
@@ -160,7 +195,9 @@ if __name__ == '__main__':
     if args.oversized:
         outname += f'_oversized'
     outname += '.csv'
-    outpath = os.path.join(args.labelsdir, outname)
+    outpath = os.path.join(args.labelsdir[0], outname)
 
-    df_output[['class', 'image_path', 'name', 'xmax', 'xmin', 'ymax', 'ymin']].to_csv(outpath, index=False)
+    print('total bboxes after all filters:', df_output.shape[0])
+    df_output = df_output[['class', 'image_path', 'name', 'xmax', 'xmin', 'ymax', 'ymin']]
+    df_output.to_csv(outpath, index=False)
     print('saved to', outpath)

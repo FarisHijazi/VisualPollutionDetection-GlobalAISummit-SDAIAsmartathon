@@ -13,9 +13,11 @@ if __name__ == '__main__':
     parser.add_argument('dir', type=str, help='directory of labels')
     parser.add_argument('--rem_conf', action='store_true', help='remove confidence')
     parser.add_argument('--topk', type=int, default=None, help='choose top k bboxes from confidence')
+    parser.add_argument('--conf_thresh', type=float, default=None, help='confidence threshold (before topk)')
     # parser.add_argument('--topk_method', default='conf', choices={'conf', 'size'}, help='set all classes to this value')
     parser.add_argument('--output', type=str, default='output', help='output file')
     args = parser.parse_args()
+    args.output = os.path.abspath(args.output)
 
     root = os.getcwd()
     os.chdir(args.dir)
@@ -30,6 +32,9 @@ if __name__ == '__main__':
         with open(label_path, 'r') as f:
             bboxes = [line.strip().split(' ') for line in f.readlines()]
             assert len(bboxes[0]) == 6, 'bbox should have 6 values'
+
+        if args.conf_thresh:
+            bboxes = [bbox for bbox in bboxes if float(bbox[-1]) > args.conf_thresh]
 
         if args.topk:
             bboxes = sorted(bboxes, key=lambda x: float(x[-1]), reverse=True)[: args.topk]
