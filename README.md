@@ -51,14 +51,22 @@ Download submitted models from [submission.zip](https://drive.google.com/file/d/
 
 ```sh
 git clone https://github.com/FarisHijazi/SDAIAsmartathon
+cd SDAIAsmartathon
+
+unzip submission.zip  # https://drive.google.com/file/d/1HE34KxOMEBPt2EcMiQIo6Ywv_7YGuHNv/view?usp=share_link
+
 mkdir repositories/
 git clone https://github.com/ultralytics/yolov5 repositories/yolov5
-
+cd repositories/yolov5
+pip install -r requirements.txt  # install dependencies from yolov5
 
 # run prediction on 3 models
 # note that --augment will produce different results each time, so you may have to run this many times to reproduce the results
-cd repositories/yolov5
-python detect.py --weights ../../yolov5s/weights/best.pt ../../exp88/weights/best.pt ../../yolov5x6-heavyaug-mergetesttrain2/weights/best.pt --augment --source path/to/data
+python detect.py --weights \
+    ../../submission/yolov5s/weights/best.pt \
+    ../../submission/exp88/weights/best.pt \
+    ../../submission/yolov5x6-heavyaug-mergetesttrain2/weights/best.pt \
+    --augment --source ../../data/test/ --save-txt --save-conf
 
 # convert predictions from txt files to csv files
 # (change exp1234 to the experiment number you want to run)
