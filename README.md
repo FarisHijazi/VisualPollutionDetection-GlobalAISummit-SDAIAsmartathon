@@ -1,5 +1,7 @@
 # Smartathon 2023
 
+⚠ Code for the active learning pipeline is not yet fully functional in this repo ⚠
+
 This is our submission for the Global AI summit Smartathon challenge for theme 1 at https://smartathon.hackerearth.com
 
 This project aimed to tackle the issue of visual pollution in the streets of Saudi Arabia by developing a high-performing, AI model that detects 11 different classes of visual pollutants.
